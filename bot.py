@@ -33,7 +33,7 @@ def is_admin(member):
     return any(r.name == "Admin" for r in member.roles)
 
 class PainelLoja(ui.View):
-    def __init__(self, produtos, data):
+    def __init__(self, produtos):
         super().__init__(timeout=None)
         for pid, dados in produtos.items():
             btn = ui.Button(
@@ -57,9 +57,9 @@ async def loja(interaction):
         description="Bem-vindo! Escolha seus produtos abaixo:",
         color=discord.Color.from_rgb(88, 101, 242)
     )
-    embed.set_footer(text="Loja Virtual - Todos os direitos reservados")
+    embed.set_footer(text="Loja Virtual")
     
-    view = PainelLoja(data["produtos"], data)
+    view = PainelLoja(data["produtos"])
     
     await interaction.response.send_message(embed=embed, view=view)
 
@@ -84,15 +84,11 @@ async def add_produto(interaction, nome: str, preco: str, canal: discord.TextCha
     data = load_data()
     pid = str(len(data["produtos"]) + 1)
     
-    data["produtos"][pid] = {
-        "nome": nome,
-        "preco": preco,
-        "desc": desc
-    }
+    data["produtos"][pid] = {"nome": nome, "preco": preco, "desc": desc}
     data["produto_canais"][pid] = str(canal.id)
     save_data(data)
     
-    await interaction.response.send_message(f"Produto '{nome}' adicionado no canal {canal.mention}!", ephemeral=True)
+    await interaction.response.send_message(f"Produto '{nome}' adicionado!", ephemeral=True)
 
 @bot.tree.command(name="lista-produtos")
 async def lista_produtos(interaction):
@@ -128,36 +124,54 @@ async def remove_produto(interaction, pid: str):
 @bot.event
 async def on_interaction(interaction):
     if interaction.type == discord.InteractionType.component:
-        cid = interaction.data.get("custom_id", "")
-        if cid.startswith("comprar_"):
-            pid = cid.replace("comprar_", "")
-            data = load_data()
-            prod = data["produtos"].get(pid)
+        custom_id = interaction.data.get("custom_id", "")
+        
+        if not custom_id.startswith("comprar_"):
+            return
             
-            if prod:
-                u = interaction.user
-                g = interaction.guild
-                
-                try:
-                    embed = discord.Embed(
-                        title="🛒 CONFIRMAÇÃO DE COMPRA",
-                        color=discord.Color.green()
-                    )
-                    embed.add_field(name="Produto", value=prod["nome"], inline=True)
-                    embed.add_field(name="Preço", value=prod["preco"], inline=True)
-                    embed.add_field(name="Descrição", value=prod["desc"], inline=False)
-                    embed.set_footer(text="Aguarde a confirmação do pagamento")
-                    
-                    ch = await g.create_text_channel(f"compra-{u.name}")
-                    await ch.set_permissions(u, view_channel=True, send_messages=True)
-                    await ch.set_permissions(g.default_role, view_channel=False)
-                    
-                    await ch.send(content=f"{u.mention}", embed=embed)
-                    await ch.send("💳 Envie o comprovante PIX aqui.")
-                    
-                    await interaction.response.send_message("✅ Canal privado criado!", ephemeral=True)
-                except:
-                    await interaction.response.send_message("Sem permissao.", ephemeral=True)
+        pid = custom_id.replace("comprar_", "")
+        data = load_data()
+        prod = data["produtos"].get(pid)
+        
+        if not prod:
+            return
+            
+        user = interaction.user
+        guild = interaction.guild
+        
+        try:
+            # Confirma resposta primeiro
+            await interaction.response.send_message("Criando canal...", ephemeral=True)
+            
+            # Cria canal privado
+            canal = await guild.create_text_channel(f"compra-{user.name}")
+            
+            # Permissões
+            await canal.set_permissions(user, view_channel=True, send_messages=True)
+            await canal.set_permissions(guild.default_role, view_channel=False)
+            
+            # Embed da compra
+            embed = discord.Embed(
+                title="🛒 CONFIRMAÇÃO DE COMPRA",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="Produto", value=prod["nome"], inline=True)
+            embed.add_field(name="Preço", value=prod["preco"], inline=True)
+            embed.add_field(name="Descrição", value=prod["desc"], inline=False)
+            
+            await canal.send(content=f"{user.mention}", embed=embed)
+            await canal.send("💳 Envie o comprovante PIX aqui.")
+            
+        except discord.errors.Forbidden:
+            try:
+                await interaction.followup.send("Sem permissao para criar canal.", ephemeral=True)
+            except:
+                pass
+        except Exception as e:
+            try:
+                await interaction.followup.send(f"Erro: {str(e)}", ephemeral=True)
+            except:
+                pass
 
 @bot.event
 async def on_ready():
