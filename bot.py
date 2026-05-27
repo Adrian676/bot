@@ -32,20 +32,10 @@ def save_data(data):
 def is_admin(member):
     return any(r.name == "Admin" for r in member.roles)
 
-# --- PAINEL DA LOJA (BONITO) ---
 class PainelLoja(ui.View):
     def __init__(self, produtos, data):
         super().__init__(timeout=None)
-        self.produtos = produtos
-        self.data = data
-        
         for pid, dados in produtos.items():
-            canal_id = data["produto_canais"].get(pid)
-            canal_texto = ""
-            if canal_id:
-                canal = bot.get_channel(int(canal_id))
-                canal_texto = f" | {canal.mention}" if canal else ""
-            
             btn = ui.Button(
                 label=f"COMPRAR {dados['nome']} - {dados['preco']}", 
                 custom_id=f"comprar_{pid}", 
@@ -62,22 +52,19 @@ async def ping(interaction):
 async def loja(interaction):
     data = load_data()
     
-    # Se não especificar produto, mostra painel geral
     embed = discord.Embed(
         title="🛒 LOJA VIRTUAL",
         description="Bem-vindo! Escolha seus produtos abaixo:",
         color=discord.Color.from_rgb(88, 101, 242)
     )
-    embed.set_thumbnail(url="https://i.imgur.com/seu-icone-aqui.png")
     embed.set_footer(text="Loja Virtual - Todos os direitos reservados")
     
     view = PainelLoja(data["produtos"], data)
     
     await interaction.response.send_message(embed=embed, view=view)
 
-# --- ADMIN: CONFIGURAR CANAL DA LOJA ---
-@bot.tree.command(name="loja canal")
-async def loja_canal(interaction, canal: discord.TextChannel):
+@bot.tree.command(name="config-loja")
+async def config_loja(interaction, canal: discord.TextChannel):
     if not is_admin(interaction.user):
         await interaction.response.send_message("Sem permissao.", ephemeral=True)
         return
@@ -88,9 +75,8 @@ async def loja_canal(interaction, canal: discord.TextChannel):
     
     await interaction.response.send_message(f"Canal da loja definido: {canal.mention}", ephemeral=True)
 
-# --- ADMIN: ADICIONAR PRODUTO ---
-@bot.tree.command(name="loja add")
-async def loja_add(interaction, nome: str, preco: str, canal: discord.TextChannel, *, desc: str, imagem: str = None):
+@bot.tree.command(name="add-produto")
+async def add_produto(interaction, nome: str, preco: str, canal: discord.TextChannel, *, desc: str):
     if not is_admin(interaction.user):
         await interaction.response.send_message("Sem permissao.", ephemeral=True)
         return
@@ -101,17 +87,15 @@ async def loja_add(interaction, nome: str, preco: str, canal: discord.TextChanne
     data["produtos"][pid] = {
         "nome": nome,
         "preco": preco,
-        "desc": desc,
-        "imagem": imagem or "https://i.imgur.com/placeholder.png"
+        "desc": desc
     }
     data["produto_canais"][pid] = str(canal.id)
     save_data(data)
     
     await interaction.response.send_message(f"Produto '{nome}' adicionado no canal {canal.mention}!", ephemeral=True)
 
-# --- ADMIN: LISTAR PRODUTOS ---
-@bot.tree.command(name="loja lista")
-async def loja_lista(interaction):
+@bot.tree.command(name="lista-produtos")
+async def lista_produtos(interaction):
     if not is_admin(interaction.user):
         return
     
@@ -125,9 +109,8 @@ async def loja_lista(interaction):
     
     await interaction.response.send_message(embed=e, ephemeral=True)
 
-# --- ADMIN: REMOVER PRODUTO ---
-@bot.tree.command(name="loja remove")
-async def loja_remove(interaction, pid: str):
+@bot.tree.command(name="remove-produto")
+async def remove_produto(interaction, pid: str):
     if not is_admin(interaction.user):
         return
     
@@ -142,7 +125,6 @@ async def loja_remove(interaction, pid: str):
     else:
         await interaction.response.send_message("Produto não encontrado.", ephemeral=True)
 
-# --- HANDLER DE COMPRA ---
 @bot.event
 async def on_interaction(interaction):
     if interaction.type == discord.InteractionType.component:
@@ -157,12 +139,10 @@ async def on_interaction(interaction):
                 g = interaction.guild
                 
                 try:
-                    # Painel bonitão da compra
                     embed = discord.Embed(
-                        title=f"🛒 CONFIRMAÇÃO DE COMPRA",
+                        title="🛒 CONFIRMAÇÃO DE COMPRA",
                         color=discord.Color.green()
                     )
-                    embed.set_thumbnail(url=prod.get("imagem"))
                     embed.add_field(name="Produto", value=prod["nome"], inline=True)
                     embed.add_field(name="Preço", value=prod["preco"], inline=True)
                     embed.add_field(name="Descrição", value=prod["desc"], inline=False)
@@ -173,11 +153,11 @@ async def on_interaction(interaction):
                     await ch.set_permissions(g.default_role, view_channel=False)
                     
                     await ch.send(content=f"{u.mention}", embed=embed)
-                    await ch.send("💳 **Envie o comprovante PIX aqui.**\n\n⚠️ Aguarde a confirmação do pagamento para receber seu produto.")
+                    await ch.send("💳 Envie o comprovante PIX aqui.")
                     
-                    await interaction.response.send_message("✅ Canal privado criado! Verifique suas mensagens.", ephemeral=True)
+                    await interaction.response.send_message("✅ Canal privado criado!", ephemeral=True)
                 except:
-                    await interaction.response.send_message("Sem permissao para criar canal.", ephemeral=True)
+                    await interaction.response.send_message("Sem permissao.", ephemeral=True)
 
 @bot.event
 async def on_ready():
