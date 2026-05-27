@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import ui
 import json
 import os
+import asyncio
 
 TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
@@ -48,31 +49,33 @@ class PainelLoja(ui.View):
 async def ping(interaction):
     await interaction.response.send_message(f"Bot online! Latencia: {round(bot.latency * 1000)}ms")
 
+@bot.tree.command(name="sync")
+async def sync(interaction):
+    if not is_admin(interaction.user):
+        await interaction.response.send_message("Sem permissao.", ephemeral=True)
+        return
+    await bot.tree.sync()
+    await interaction.response.send_message("Comandos sincronizados!", ephemeral=True)
+
 @bot.tree.command(name="loja")
 async def loja(interaction):
     data = load_data()
     
-    # Embed com cores e formato diferente
     embed = discord.Embed(
         title="╔══════════════════════════════════╗\n║        🛒  LOJA VIRTUAL  🛒        ║\n╚══════════════════════════════════╝",
-        description="**▸▸ BEM-VINDO À LOJA ◂◂**\n\nEscolha seu produto abaixo:",
-        color=discord.Color.from_rgb(255, 215, 0)  # Dourado
+        description="**Bem-vindo!**\nEscolha seu produto:\n",
+        color=discord.Color.from_rgb(255, 215, 0)
     )
     
     if data["produtos"]:
-        produtos_texto = ""
         for pid, d in data["produtos"].items():
-            produtos_texto += f"**▸ {d['nome']}**\n   │\n   ├─ 💵 Preço: `{d['preco']}`\n   └─ 📝 {d['desc'][:50]}...\n\n"
-        
-        embed.description += f"\n{produtos_texto}"
+            embed.add_field(name=f"📦 {d['nome']}", value=f"💰 {d['preco']}\n{d['desc'][:60]}", inline=False)
     else:
-        embed.add_field(name="❌ Nenhum produto", value="Use /add-produto para adicionar", inline=False)
+        embed.add_field(name="Sem produtos", value="Nenhum produto", inline=False)
     
-    embed.set_footer(text="© Loja Virtual 2025 | Clique em COMPRAR")
-    embed.set_author(name="LOJA VIRTUAL", icon_url="https://i.imgur.com/SeuIcone.png")
+    embed.set_footer(text="Clique em COMPRAR")
     
     view = PainelLoja(data["produtos"])
-    
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 @bot.tree.command(name="loja-canal")
@@ -84,7 +87,6 @@ async def loja_canal(interaction, canal: discord.TextChannel):
     data = load_data()
     data["loja_channel"] = str(canal.id)
     save_data(data)
-    
     await interaction.response.send_message(f"Canal definido: {canal.mention}", ephemeral=True)
 
 @bot.tree.command(name="enviar-loja")
@@ -95,39 +97,29 @@ async def enviar_loja(interaction):
     
     data = load_data()
     canal_id = data.get("loja_channel")
-    
     if not canal_id:
         await interaction.response.send_message("Use /loja-canal primeiro", ephemeral=True)
         return
     
     canal = bot.get_channel(int(canal_id))
     if not canal:
-        await interaction.response.send_message("Canal não encontrado.", ephemeral=True)
+        await interaction.response.send_message("Canal nao encontrado.", ephemeral=True)
         return
     
-    # Painel super bonito no canal
     embed = discord.Embed(
         title="╔═══════════════════════════════════════╗\n║     🛒🛒🛒  LOJA VIRTUAL  🛒🛒🛒      ║\n╚═══════════════════════════════════════╝",
-        description="**🎉 BEM-VINDO! 🎉**\n\nEscolha abaixo o produto desejado:\n",
+        description="**Escolha abaixo:**\n",
         color=discord.Color.from_rgb(255, 215, 0)
     )
     
-    if data["produtos"]:
-        for pid, d in data["produtos"].items():
-            embed.add_field(
-                name=f"📦 {pid}. {d['nome']}",
-                value=f"💰 **Preço:** `{d['preco']}`\n📝 {d['desc'][:80]}...",
-                inline=False
-            )
-    else:
-        embed.add_field(name="❌ Sem produtos", value="Nenhum produto disponível", inline=False)
+    for pid, d in data["produtos"].items():
+        embed.add_field(name=f"📦 {d['nome']}", value=f"💰 **{d['preco']}**\n{d['desc'][:80]}", inline=False)
     
-    embed.set_footer(text="© Loja Virtual 2025 | Clique no botão para comprar")
+    embed.set_footer(text="Clique no botao para comprar")
     
     view = PainelLoja(data["produtos"])
-    
     await canal.send(embed=embed, view=view)
-    await interaction.response.send_message(f"Loja enviada para {canal.mention}!", ephemeral=True)
+    await interaction.response.send_message(f"Enviado para {canal.mention}!", ephemeral=True)
 
 @bot.tree.command(name="add-produto")
 async def add_produto(interaction, nome: str, preco: str, canal: discord.TextChannel, *, desc: str):
@@ -140,90 +132,80 @@ async def add_produto(interaction, nome: str, preco: str, canal: discord.TextCha
     data["produtos"][pid] = {"nome": nome, "preco": preco, "desc": desc}
     data["produto_canais"][pid] = str(canal.id)
     save_data(data)
-    
-    await interaction.response.send_message(f"✅ Produto '{nome}' adicionado!", ephemeral=True)
+    await interaction.response.send_message(f"Produto '{nome}' adicionado!", ephemeral=True)
 
 @bot.tree.command(name="lista-produtos")
 async def lista_produtos(interaction):
     if not is_admin(interaction.user):
         return
-    
     data = load_data()
-    e = discord.Embed(title="📦 Lista de Produtos", color=discord.Color.blurple())
-    
+    e = discord.Embed(title="Lista Produtos", color=discord.Color.blurple())
     for pid, d in data["produtos"].items():
-        canal_id = data["produto_canais"].get(pid)
-        canal = bot.get_channel(int(canal_id)) if canal_id else "Nenhum"
-        e.add_field(name=f"ID {pid}", value=f"**{d['nome']}** - {d['preco']}\nCanal: {canal}")
-    
+        e.add_field(name=f"ID {pid}", value=f"{d['nome']} - {d['preco']}")
     await interaction.response.send_message(embed=e, ephemeral=True)
 
 @bot.tree.command(name="remove-produto")
 async def remove_produto(interaction, pid: str):
     if not is_admin(interaction.user):
         return
-    
     data = load_data()
     if pid in data["produtos"]:
         nome = data["produtos"][pid]["nome"]
         del data["produtos"][pid]
-        if pid in data["produto_canais"]:
-            del data["produto_canais"][pid]
         save_data(data)
-        await interaction.response.send_message(f"✅ Produto '{nome}' removido!", ephemeral=True)
+        await interaction.response.send_message(f"Produto '{nome}' removido!", ephemeral=True)
     else:
-        await interaction.response.send_message("❌ Produto não encontrado.", ephemeral=True)
+        await interaction.response.send_message("Nao encontrado.", ephemeral=True)
 
 @bot.event
 async def on_interaction(interaction):
     if interaction.type == discord.InteractionType.component:
         custom_id = interaction.data.get("custom_id", "")
-        
         if not custom_id.startswith("comprar_"):
             return
-            
+        
         pid = custom_id.replace("comprar_", "")
         data = load_data()
         prod = data["produtos"].get(pid)
         
         if not prod:
             return
-            
+        
         user = interaction.user
         guild = interaction.guild
         
         try:
             await interaction.response.defer()
-            
             canal = await guild.create_text_channel(f"compra-{user.name}")
             await canal.set_permissions(user, view_channel=True, send_messages=True)
             await canal.set_permissions(guild.default_role, view_channel=False)
             
-            # Embed bonito da compra
-            embed = discord.Embed(
-                title="╔══════════════════════════════════╗\n║    🧾 CONFIRMAÇÃO DE COMPRA    ║\n╚══════════════════════════════════╝",
-                color=discord.Color.green()
-            )
-            embed.add_field(name="📦 Produto", value=prod["nome"], inline=True)
-            embed.add_field(name="💰 Preço", value=prod["preco"], inline=True)
-            embed.add_field(name="📝 Descrição", value=prod["desc"], inline=False)
-            embed.set_footer(text="Aguarde confirmação do pagamento")
+            embed = discord.Embed(title="Confirmacao", color=discord.Color.green())
+            embed.add_field(name="Produto", value=prod["nome"], inline=True)
+            embed.add_field(name="Preco", value=prod["preco"], inline=True)
+            embed.add_field(name="Descricao", value=prod["desc"], inline=False)
             
             await canal.send(content=f"{user.mention}", embed=embed)
-            await canal.send("💳 **ENVIE O COMPROVANTE DO PIX AQUI**\n\n⏰ Aguarde aprovação para receber o produto.")
-            
-            await interaction.followup.send("✅ Canal privado criado!", ephemeral=True)
-            
+            await canal.send("ENVIE O COMPROVANTE PIX!")
+            await interaction.followup.send("Canal criado!", ephemeral=True)
         except Exception as e:
             try:
-                await interaction.followup.send(f"❌ Erro: {str(e)}", ephemeral=True)
+                await interaction.followup.send(f"Erro: {str(e)}", ephemeral=True)
             except:
                 pass
+
+async def sync_commands():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        await bot.tree.sync()
+        await asyncio.sleep(30)
 
 @bot.event
 async def on_ready():
     print(f"Bot online: {bot.user}")
     await bot.tree.sync()
+    print("Comandos sincronizados!")
+    bot.loop.create_task(sync_commands())
 
 if __name__ == "__main__":
     bot.run(TOKEN)
