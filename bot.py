@@ -1,132 +1,132 @@
-importar discórdia
-de discórdia.ext importar comandos
-de discórdia importar ui
-importar json
-importar os
+import discord
+from discord.ext import commands
+from discord import ui
+import json
+import os
 
-TOKEN = os.meio ambiente.pegar("TOKEN")
-se não TOKEN:
-    imprimir("TOKEN não configurado!")
-    sair()
+TOKEN = os.environ.get("TOKEN")
+if not TOKEN:
+    print("TOKEN not configured!")
+    exit()
 
-NOME_FUNÇÃO_ADMIN = "Administrador"
+ADMIN_ROLE_NAME = "Admin"
 PRODUTOS_FILE = "produtos.json"
 
-intenções = discórdia.Intenções.padrão()
-intenções.mensagem_conteúdo = Verdadeiro
-intenções.guildas = Verdadeiro
-bot = comandos.Botão(comando_prefixo="!", intenções=intenções)
+intents = discord.Intents.default()
+intents.message_content = True
+intents.guilds = True
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-def carregar_produtos():
-    tentar:
-        se não os.caminho.existe(ARQUIVO_PRODUTOS):
-            retornar {}
-        com abrir(ARQUIVO_PRODUTOS, "r") como f:
-            retornar json.carregar(f)
-    exceto:
-        retornar {}
+def load_products():
+    try:
+        if not os.path.exists(PRODUTOS_FILE):
+            return {}
+        with open(PRODUTOS_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
 
-def salvar_produtos(dados):
-    com abrir(ARQUIVO_PRODUTOS, "w") como f:
-        json.despejar(dados, f, garantir_ascii=Falso, recuar=2)
+def save_products(data):
+    with open(PRODUTOS_FILE, "w") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-def é_admin(membro):
-    retornar qualquer(r.nome == NOME_FUNÇÃO_ADMIN para r em membro.papéis)
+def is_admin(member):
+    return any(r.name == ADMIN_ROLE_NAME for r in member.roles)
 
-@bot.tree.comando(nome="ping")
-assíncrono def ping(interação):
-    esperar interação.resposta.enviar_mensagem(f"Bot online! Latência: {redondo(robô.latência * 1000)}em")
+@bot.tree.command(name="ping")
+async def ping(interaction):
+    await interaction.response.send_message(f"Bot online! Latency: {round(bot.latency * 1000)}ms")
 
-@bot.tree.comando(nome="loja")
-assíncrono def loja(interação):
-    p = carregar_produtos()
-    se não p:
-        esperar interação.resposta.enviar_mensagem("Nenhum produto.", efêmero=Verdadeiro)
-        retornar
-    e = discórdia.Incorporar(título="Loja Virtual", cor=discórdia.Cor.azul())
-    para pid, d em p.itens():
-        e.adicionar_campo(nome=f"{pid}. {d['nome']}", valor=f"{d['preco']} - {d['desc']}")
-    visualização = ui.Ver()
-    para pid, d em p.itens():
-        btn = ui.Botão(rótulo=f"Comprar {d['nome']}", ID_personalizado=f"comprar_{pid}", estilo=discórdia.Estilo de botão.verde)
-        visualizar.item_adicionar(btn)
-    esperar interação.resposta.enviar_mensagem(incorporar=e, visualizar=visualizar)
+@bot.tree.command(name="loja")
+async def loja(interaction):
+    p = load_products()
+    if not p:
+        await interaction.response.send_message("Nenhum produto.", ephemeral=True)
+        return
+    e = discord.Embed(title="Loja Virtual", color=discord.Color.blue())
+    for pid, d in p.items():
+        e.add_field(name=f"{pid}. {d['nome']}", value=f"{d['preco']} - {d['desc']}")
+    view = ui.View()
+    for pid, d in p.items():
+        btn = ui.Button(label=f"Comprar {d['nome']}", custom_id=f"comprar_{pid}", style=discord.ButtonStyle.green)
+        view.add_item(btn)
+    await interaction.response.send_message(embed=e, view=view)
 
-@bot.tree.comando(nome="criar")
-assíncrono def corar(interação, nome: str, preco: str, *, desc: str):
-    se não é_admin(interação.usuário):
-        esperar interação.resposta.enviar_mensagem("Sem permissão.", efêmero=Verdadeiro)
-        retornar
-    p = carregar_produtos()
+@bot.tree.command(name="criar")
+async def criar(interaction, nome: str, preco: str, *, desc: str):
+    if not is_admin(interaction.user):
+        await interaction.response.send_message("Sem permissao.", ephemeral=True)
+        return
+    p = load_products()
     pid = str(len(p) + 1)
     p[pid] = {"nome": nome, "preco": preco, "desc": desc}
-    salvar_produtos(p)
-    esperar interação.resposta.enviar_mensagem(f"Produto {nome} criado!", efêmero=Verdadeiro)
+    save_products(p)
+    await interaction.response.send_message(f"Produto {nome} criado!", ephemeral=True)
 
-@bot.tree.comando(nome="produtos")
-assíncrono def produtos(interação):
-    se não é_admin(interação.usuário):
-        retornar
-    p = carregar_produtos()
-    e = discórdia.Incorporar(título="Produtos", cor=discórdia.Cor.desfocar())
-    para pid, d em p.itens():
-        e.adicionar_campo(nome=f"ID {pid}", valor=f"{d['nome']} - {d['preco']}")
-    esperar interação.resposta.enviar_mensagem(incorporar=e, efêmero=Verdadeiro)
+@bot.tree.command(name="produtos")
+async def produtos(interaction):
+    if not is_admin(interaction.user):
+        return
+    p = load_products()
+    e = discord.Embed(title="Produtos", color=discord.Color.blurple())
+    for pid, d in p.items():
+        e.add_field(name=f"ID {pid}", value=f"{d['nome']} - {d['preco']}")
+    await interaction.response.send_message(embed=e, ephemeral=True)
 
-@bot.tree.comando(nome="editar")
-assíncrono def editar(interação, pid: str, nome: str, preco: str, *, desc: str):
-    se não é_admin(interação.usuário):
-        retornar
-    p = carregar_produtos()
-    se pid não em p:
-        esperar interação.resposta.enviar_mensagem("Nao encontrado.", efêmero=Verdadeiro)
-        retornar
+@bot.tree.command(name="editar")
+async def editar(interaction, pid: str, nome: str, preco: str, *, desc: str):
+    if not is_admin(interaction.user):
+        return
+    p = load_products()
+    if pid not in p:
+        await interaction.response.send_message("Nao encontrado.", ephemeral=True)
+        return
     p[pid] = {"nome": nome, "preco": preco, "desc": desc}
-    salvar_produtos(p)
-    esperar interação.resposta.enviar_mensagem("Produto atualizado!", efêmero=Verdadeiro)
+    save_products(p)
+    await interaction.response.send_message("Produto atualizado!", ephemeral=True)
 
-@bot.tree.comando(nome="excluir")
-assíncrono def excluir(interação, pid: str):
-    se não é_admin(interação.usuário):
-        retornar
-    p = carregar_produtos()
-    se pid não em p:
-        esperar interação.resposta.enviar_mensagem("Nao encontrado.", efêmero=Verdadeiro)
-        retornar
+@bot.tree.command(name="excluir")
+async def excluir(interaction, pid: str):
+    if not is_admin(interaction.user):
+        return
+    p = load_products()
+    if pid not in p:
+        await interaction.response.send_message("Nao encontrado.", ephemeral=True)
+        return
     nome = p[pid]["nome"]
-    faça p[pid]
-    salvar_produtos(p)
-    esperar interação.resposta.enviar_mensagem(f"Produto {nome} excluído!", efêmero=Verdadeiro)
+    del p[pid]
+    save_products(p)
+    await interaction.response.send_message(f"Produto {nome} excluido!", ephemeral=True)
 
-@bot.evento
-assíncrono def on_interação(interação):
-    se interação.tipo == discórdia.Tipo de interação.componente:
-        cid = interação.dados.Pégar("id_personalizado", "")
-        se ácido.começa com("comprar_"):
-            pid = cid.substituto("comprar_", "")
-            p = carregar_produtos()
-            prod = p.Pégar(pid)
-            se produção:
-                u = interação.usuário
-                g = interação.Guilda
-                tentar:
-                    ch = esperar g.criar_canal de texto_(f"compra-{você.nome}")
-                    esperar ch.definir_permissões(u, view_channel=Verdadeiro, enviar_mensagens=Verdadeiro)
-                    esperar ch.definir_permissões(g.função_padrão, visualizar_canal=Falso)
-                    e = discórdia.Incorporar(título="Nova Compra", cor=discórdia.Cor.verde())
-                    e.adicionar_campo(nome="Produto", valor=prod["nome"])
-                    e.adicionar_campo(nome="Pré-co", valor=prod["preco"])
-                    e.adicionar_campo(nome="Descricao", valor=prod["desc"])
-                    esperar ch.invejar(conteúdo=f"{você.menção}", incorporar=e)
-                    esperar ch.invejar("Envie o compressor PIX aqui.")
-                    esperar interação.resposta.enviar_mensagem("Canal criado!", efêmero=Verdadeiro)
-                exceto:
-                    esperar interação.resposta.enviar_mensagem("Sem permissão.", efêmero=Verdadeiro)
+@bot.event
+async def on_interaction(interaction):
+    if interaction.type == discord.InteractionType.component:
+        cid = interaction.data.get("custom_id", "")
+        if cid.startswith("comprar_"):
+            pid = cid.replace("comprar_", "")
+            p = load_products()
+            prod = p.get(pid)
+            if prod:
+                u = interaction.user
+                g = interaction.guild
+                try:
+                    ch = await g.create_text_channel(f"compra-{u.name}")
+                    await ch.set_permissions(u, view_channel=True, send_messages=True)
+                    await ch.set_permissions(g.default_role, view_channel=False)
+                    e = discord.Embed(title="Nova Compra", color=discord.Color.green())
+                    e.add_field(name="Produto", value=prod["nome"])
+                    e.add_field(name="Preco", value=prod["preco"])
+                    e.add_field(name="Descricao", value=prod["desc"])
+                    await ch.send(content=f"{u.mention}", embed=e)
+                    await ch.send("Envie o comprovante PIX aqui.")
+                    await interaction.response.send_message("Canal criado!", ephemeral=True)
+                except:
+                    await interaction.response.send_message("Sem permissao.", ephemeral=True)
 
-@bot.evento
-assíncrono def pronto para_ligado():
-    imprimir(f"Bot online: {robô.usuário}")
-    esperar robô.arvore.sincronizar()
+@bot.event
+async def on_ready():
+    print(f"Bot online: {bot.user}")
+    await bot.tree.sync()
 
-se __nome__ == "__principal__":
-    robô.corretor(SÍMBOLO)
+if __name__ == "__main__":
+    bot.run(TOKEN)
