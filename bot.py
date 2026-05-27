@@ -3,7 +3,6 @@ from discord.ext import commands
 from discord import ui
 import json
 import os
-import asyncio
 
 TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
@@ -20,11 +19,11 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 def load_data():
     try:
         if not os.path.exists(DATA_FILE):
-            return {"produtos": {}, "loja_channel": None}
+            return {"produtos": {}, "canal_loja": None}
         with open(DATA_FILE, "r") as f:
             return json.load(f)
     except:
-        return {"produtos": {}, "loja_channel": None}
+        return {"produtos": {}, "canal_loja": None}
 
 def save_data(data):
     with open(DATA_FILE, "w") as f:
@@ -33,16 +32,13 @@ def save_data(data):
 def is_admin(member):
     return any(r.name == "Admin" for r in member.roles)
 
-class LojasButton(ui.Button):
+class BotaoComprar(ui.Button):
     def __init__(self, pid, nome, preco):
         super().__init__(
-            label=f"💰 COMPRAR {nome} - {preco}",
+            label=f"COMPRAR {nome} - {preco}",
             custom_id=f"comprar_{pid}",
             style=discord.ButtonStyle.success
         )
-        self.pid = pid
-        self.nome = nome
-        self.preco = preco
 
     async def callback(self, interaction):
         pid = self.custom_id.replace("comprar_", "")
@@ -59,7 +55,7 @@ class LojasButton(ui.Button):
                 await canal.set_permissions(user, view_channel=True, send_messages=True)
                 await canal.set_permissions(guild.default_role, view_channel=False)
                 
-                embed = discord.Embed(title="Confirmacao de Compra", color=discord.Color.green())
+                embed = discord.Embed(title="Confirmacao", color=discord.Color.green())
                 embed.add_field(name="Produto", value=prod["nome"])
                 embed.add_field(name="Preco", value=prod["preco"])
                 embed.add_field(name="Descricao", value=prod["desc"])
@@ -70,67 +66,70 @@ class LojasButton(ui.Button):
             except:
                 await interaction.followup.send("Erro!", ephemeral=True)
 
-@bot.tree.command(name="ping", description="Verifica se o bot esta online")
-async def ping(interaction):
-    await interaction.response.send_message(f"Online! {round(bot.latency*1000)}ms")
-
-@bot.tree.command(name="loja", description="Mostra a loja virtual")
-async def cmd_loja(interaction):
+def criar_painel():
     data = load_data()
     embed = discord.Embed(title="LOJA VIRTUAL", description="Escolha:", color=discord.Color.gold())
-    for pid, d in data["produtos"].items():
-        embed.add_field(name=d["nome"], value=f"{d['preco']} - {d['desc'][:50]}")
     
     view = ui.View()
     for pid, d in data["produtos"].items():
-        view.add_item(LojasButton(pid, d["nome"], d["preco"]))
+        embed.add_field(name=d["nome"], value=f"{d['preco']} - {d['desc'][:60]}")
+        view.add_item(BotaoComprar(pid, d["nome"], d["preco"]))
     
+    return embed, view
+
+@bot.tree.command(name="ping")
+async def ping(interaction):
+    await interaction.response.send_message(f"Online! {round(bot.latency*1000)}ms")
+
+@bot.tree.command(name="loja")
+async def cmd_loja(interaction):
+    embed, view = criar_painel()
     await interaction.response.send_message(embed=embed, view=view)
 
-@bot.tree.command(name="loja-canal", description="Define canal da loja")
+@bot.tree.command(name="add-produto")
+async def cmd_add_produto(interaction, nome: str, preco: str, canal: discord.TextChannel, *, desc: str):
+    if not is_admin(interaction.user):
+        await interaction.response.send_message("Sem permissao", ephemeral=True)
+        return
+    
+    data = load_data()
+    data["canal_loja"] = str(canal.id)
+    pid = str(len(data["produtos"]) + 1)
+    data["produtos"][pid] = {"nome": nome, "preco": preco, "desc": desc}
+    save_data(data)
+    
+    # Envia automaticamente para o canal
+    embed, view = criar_painel()
+    await canal.send(embed=embed, view=view)
+    
+    await interaction.response.send_message(f"Produto adicionado e painel enviado para {canal.mention}!", ephemeral=True)
+
+@bot.tree.command(name="loja-canal")
 async def cmd_loja_canal(interaction, canal: discord.TextChannel):
     if not is_admin(interaction.user):
         await interaction.response.send_message("Sem permissao", ephemeral=True)
         return
     data = load_data()
-    data["loja_channel"] = str(canal.id)
+    data["canal_loja"] = str(canal.id)
     save_data(data)
     await interaction.response.send_message(f"Canal: {canal.mention}", ephemeral=True)
 
-@bot.tree.command(name="enviar-loja", description="Envia loja para o canal")
+@bot.tree.command(name="enviar-loja")
 async def cmd_enviar_loja(interaction):
     if not is_admin(interaction.user):
         await interaction.response.send_message("Sem permissao", ephemeral=True)
         return
     data = load_data()
-    canal = bot.get_channel(int(data.get("loja_channel", 0)))
+    canal = bot.get_channel(int(data.get("canal_loja", 0)))
     if not canal:
-        await interaction.response.send_message("Canal nao definido", ephemeral=True)
+        await interaction.response.send_message("Canl nao definido. Use /loja-canal primeiro.", ephemeral=True)
         return
     
-    embed = discord.Embed(title="LOJA VIRTUAL", description="Escolha:", color=discord.Color.gold())
-    for pid, d in data["produtos"].items():
-        embed.add_field(name=d["nome"], value=f"{d['preco']}")
-    
-    view = ui.View()
-    for pid, d in data["produtos"].items():
-        view.add_item(LojasButton(pid, d["nome"], d["preco"]))
-    
+    embed, view = criar_painel()
     await canal.send(embed=embed, view=view)
-    await interaction.response.send_message("Enviado!", ephemeral=True)
+    await interaction.response.send_message("Painel enviado!", ephemeral=True)
 
-@bot.tree.command(name="add-produto", description="Adiciona produto")
-async def cmd_add_produto(interaction, nome: str, preco: str, canal: discord.TextChannel, *, desc: str):
-    if not is_admin(interaction.user):
-        await interaction.response.send_message("Sem permissao", ephemeral=True)
-        return
-    data = load_data()
-    pid = str(len(data["produtos"]) + 1)
-    data["produtos"][pid] = {"nome": nome, "preco": preco, "desc": desc}
-    save_data(data)
-    await interaction.response.send_message(f"Produto {nome} adicionado!", ephemeral=True)
-
-@bot.tree.command(name="lista-produtos", description="Lista produtos")
+@bot.tree.command(name="lista-produtos")
 async def cmd_lista_produtos(interaction):
     if not is_admin(interaction.user):
         return
@@ -138,7 +137,7 @@ async def cmd_lista_produtos(interaction):
     for pid, d in data["produtos"].items():
         await interaction.response.send_message(f"{pid}. {d['nome']} - {d['preco']}", ephemeral=True)
 
-@bot.tree.command(name="remove-produto", description="Remove produto")
+@bot.tree.command(name="remove-produto")
 async def cmd_remove_produto(interaction, pid: str):
     if not is_admin(interaction.user):
         return
@@ -148,7 +147,7 @@ async def cmd_remove_produto(interaction, pid: str):
         save_data(data)
         await interaction.response.send_message("Removido!", ephemeral=True)
 
-@bot.tree.command(name="sync", description="Sincroniza comandos")
+@bot.tree.command(name="sync")
 async def cmd_sync(interaction):
     if not is_admin(interaction.user):
         return
@@ -159,7 +158,6 @@ async def cmd_sync(interaction):
 async def on_ready():
     print(f"Bot: {bot.user}")
     await bot.tree.sync()
-    print("Pronto!")
 
 if __name__ == "__main__":
     bot.run(TOKEN)
