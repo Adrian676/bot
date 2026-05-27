@@ -37,7 +37,7 @@ class PainelLoja(ui.View):
         super().__init__(timeout=None)
         for pid, dados in produtos.items():
             btn = ui.Button(
-                label=f"COMPRAR {dados['nome']} - {dados['preco']}", 
+                label=f"COMPRAR {dados['nome']}", 
                 custom_id=f"comprar_{pid}", 
                 style=discord.ButtonStyle.success,
                 emoji="🛒"
@@ -52,18 +52,33 @@ async def ping(interaction):
 async def loja(interaction):
     data = load_data()
     
+    # Embed grande e bonito
     embed = discord.Embed(
-        title="🛒 LOJA VIRTUAL",
-        description="Escolha seus produtos abaixo:",
+        title="🛒 ═══ LOJA VIRTUAL ═══ 🛒",
+        description="**Bem-vindo à nossa loja!**\n\nEscolha abaixo o produto que deseja comprar:",
         color=discord.Color.from_rgb(88, 101, 242)
     )
+    
+    # Lista os produtos
+    if data["produtos"]:
+        for pid, d in data["produtos"].items():
+            embed.add_field(
+                name=f"📦 {d['nome']}",
+                value=f"**Preço:** {d['preco']}\n📝 {d['desc'][:100]}...",
+                inline=False
+            )
+    else:
+        embed.add_field(name="Nenhum produto", value="Use /add-produto para adicionar.", inline=False)
+    
+    embed.set_footer(text="Loja Virtual - Todos os direitos reservados")
+    embed.set_thumbnail(url="https://i.imgur.com/SeuIcone.png")
     
     view = PainelLoja(data["produtos"])
     
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-@bot.tree.command(name="config-loja")
-async def config_loja(interaction, canal: discord.TextChannel):
+@bot.tree.command(name="loja-canal")
+async def loja_canal(interaction, canal: discord.TextChannel):
     if not is_admin(interaction.user):
         await interaction.response.send_message("Sem permissao.", ephemeral=True)
         return
@@ -72,7 +87,52 @@ async def config_loja(interaction, canal: discord.TextChannel):
     data["loja_channel"] = str(canal.id)
     save_data(data)
     
-    await interaction.response.send_message(f"Canal definido: {canal.mention}", ephemeral=True)
+    await interaction.response.send_message(f"Canal da loja definido: {canal.mention}", ephemeral=True)
+
+@bot.tree.command(name="enviar-loja")
+async def enviar_loja(interaction):
+    """Envia o painel da loja para o canal configurado"""
+    if not is_admin(interaction.user):
+        await interaction.response.send_message("Sem permissao.", ephemeral=True)
+        return
+    
+    data = load_data()
+    canal_id = data.get("loja_channel")
+    
+    if not canal_id:
+        await interaction.response.send_message("Configure o canal primeiro com /loja-canal", ephemeral=True)
+        return
+    
+    canal = bot.get_channel(int(canal_id))
+    if not canal:
+        await interaction.response.send_message("Canal não encontrado.", ephemeral=True)
+        return
+    
+    # Embed grande e bonito
+    embed = discord.Embed(
+        title="🛒 ═══ LOJA VIRTUAL ═══ 🛒",
+        description="**Bem-vindo à nossa loja!**\n\nEscolha abaixo o produto que deseja comprar:",
+        color=discord.Color.from_rgb(88, 101, 242)
+    )
+    
+    embed.set_thumbnail(url="https://i.imgur.com/SeuIcone.png")
+    
+    if data["produtos"]:
+        for pid, d in data["produtos"].items():
+            embed.add_field(
+                name=f"📦 {d['nome']}",
+                value=f"**Preço:** {d['preco']}\n{d['desc'][:100]}",
+                inline=False
+            )
+    else:
+        embed.add_field(name="Sem produtos", value="Nenhum produto disponível.", inline=False)
+    
+    embed.set_footer(text="Loja Virtual - Clique em COMPRAR para iniciar")
+    
+    view = PainelLoja(data["produtos"])
+    
+    await canal.send(embed=embed, view=view)
+    await interaction.response.send_message(f"Loja enviada para {canal.mention}!", ephemeral=True)
 
 @bot.tree.command(name="add-produto")
 async def add_produto(interaction, nome: str, preco: str, canal: discord.TextChannel, *, desc: str):
@@ -144,15 +204,16 @@ async def on_interaction(interaction):
             await canal.set_permissions(user, view_channel=True, send_messages=True)
             await canal.set_permissions(guild.default_role, view_channel=False)
             
-            embed = discord.Embed(title="Nova Compra", color=discord.Color.green())
+            embed = discord.Embed(title="🛒 CONFIRMAÇÃO DE COMPRA", color=discord.Color.green())
             embed.add_field(name="Produto", value=prod["nome"], inline=True)
             embed.add_field(name="Preço", value=prod["preco"], inline=True)
             embed.add_field(name="Descrição", value=prod["desc"], inline=False)
+            embed.set_footer(text="Aguarde a confirmação do pagamento")
             
             await canal.send(content=f"{user.mention}", embed=embed)
-            await canal.send("PIX aqui.")
+            await canal.send("💳 **Envie o comprovante PIX aqui.**\n\nAguarde a confirmação para receber seu produto.")
             
-            await interaction.followup.send("Canal criado!", ephemeral=True)
+            await interaction.followup.send("Canal privado criado!", ephemeral=True)
             
         except Exception as e:
             try:
