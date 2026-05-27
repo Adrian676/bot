@@ -186,7 +186,7 @@ async def on_interaction(interaction):
             embed.add_field(name="Descricao", value=prod["desc"], inline=False)
             
             await canal.send(content=f"{user.mention}", embed=embed)
-            await canal.send("ENVIE O COMPROVANTE PIX!")
+            await canal.send("Realize o pagamento no seguinte pix: adrianalmarques80@gmail.com")
             await interaction.followup.send("Canal criado!", ephemeral=True)
         except Exception as e:
             try:
