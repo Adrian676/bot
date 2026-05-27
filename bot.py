@@ -6,7 +6,7 @@ importar os
 
 TOKEN = os.meio ambiente.pegar("TOKEN")
 se não TOKEN:
-    imprimir("TOKEN nao configurado!")
+    imprimir("TOKEN não configurado!")
     sair()
 
 NOME_FUNÇÃO_ADMIN = "Administrador"
