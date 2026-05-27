@@ -54,14 +54,13 @@ async def loja(interaction):
     
     embed = discord.Embed(
         title="🛒 LOJA VIRTUAL",
-        description="Bem-vindo! Escolha seus produtos abaixo:",
+        description="Escolha seus produtos abaixo:",
         color=discord.Color.from_rgb(88, 101, 242)
     )
-    embed.set_footer(text="Loja Virtual")
     
     view = PainelLoja(data["produtos"])
     
-    await interaction.response.send_message(embed=embed, view=view)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 @bot.tree.command(name="config-loja")
 async def config_loja(interaction, canal: discord.TextChannel):
@@ -73,7 +72,7 @@ async def config_loja(interaction, canal: discord.TextChannel):
     data["loja_channel"] = str(canal.id)
     save_data(data)
     
-    await interaction.response.send_message(f"Canal da loja definido: {canal.mention}", ephemeral=True)
+    await interaction.response.send_message(f"Canal definido: {canal.mention}", ephemeral=True)
 
 @bot.tree.command(name="add-produto")
 async def add_produto(interaction, nome: str, preco: str, canal: discord.TextChannel, *, desc: str):
@@ -83,7 +82,6 @@ async def add_produto(interaction, nome: str, preco: str, canal: discord.TextCha
     
     data = load_data()
     pid = str(len(data["produtos"]) + 1)
-    
     data["produtos"][pid] = {"nome": nome, "preco": preco, "desc": desc}
     data["produto_canais"][pid] = str(canal.id)
     save_data(data)
@@ -140,33 +138,22 @@ async def on_interaction(interaction):
         guild = interaction.guild
         
         try:
-            # Confirma resposta primeiro
-            await interaction.response.send_message("Criando canal...", ephemeral=True)
+            await interaction.response.defer()
             
-            # Cria canal privado
             canal = await guild.create_text_channel(f"compra-{user.name}")
-            
-            # Permissões
             await canal.set_permissions(user, view_channel=True, send_messages=True)
             await canal.set_permissions(guild.default_role, view_channel=False)
             
-            # Embed da compra
-            embed = discord.Embed(
-                title="🛒 CONFIRMAÇÃO DE COMPRA",
-                color=discord.Color.green()
-            )
+            embed = discord.Embed(title="Nova Compra", color=discord.Color.green())
             embed.add_field(name="Produto", value=prod["nome"], inline=True)
             embed.add_field(name="Preço", value=prod["preco"], inline=True)
             embed.add_field(name="Descrição", value=prod["desc"], inline=False)
             
             await canal.send(content=f"{user.mention}", embed=embed)
-            await canal.send("💳 Envie o comprovante PIX aqui.")
+            await canal.send("PIX aqui.")
             
-        except discord.errors.Forbidden:
-            try:
-                await interaction.followup.send("Sem permissao para criar canal.", ephemeral=True)
-            except:
-                pass
+            await interaction.followup.send("Canal criado!", ephemeral=True)
+            
         except Exception as e:
             try:
                 await interaction.followup.send(f"Erro: {str(e)}", ephemeral=True)
