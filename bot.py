@@ -68,9 +68,9 @@ class BotaoComprar(ui.Button):
 
 def criar_painel():
     data = load_data()
-    embed = discord.Embed(title="LOJA VIRTUAL", description="Escolha:", color=discord.Color.gold())
+    embed = discord.Embed(title="# =========LOJA VIRTUAL=========", description="## Escolha:", color=discord.Color.gold())
     view = ui.View()
-    for pid, d in data["produtos"].items():
+    for pid, d in data["### produtos"].items():
         embed.add_field(name=d["nome"], value=f"{d['preco']} - {d['desc'][:60]}")
         view.add_item(BotaoComprar(pid, d["nome"], d["preco"]))
     return embed, view
