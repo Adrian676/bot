@@ -1,3 +1,6 @@
+from pdb import run
+from tkinter import YES
+
 import discord
 from discord.ext import commands
 from discord import ui
@@ -68,7 +71,11 @@ class BotaoComprar(ui.Button):
 
 def criar_painel():
     data = load_data()
-    embed = discord.Embed(title="# =========LOJA VIRTUAL=========", description="## Escolha:", color=discord.Color.gold())
+    embed = discord.Embed(
+    title="=======LOJA VIRTUAL=======",           
+    description="Escolha:",         
+    color=discord.Color.from_rgb(255,0,0)
+)
     view = ui.View()
     for pid, d in data["### produtos"].items():
         embed.add_field(name=d["nome"], value=f"{d['preco']} - {d['desc'][:60]}")
