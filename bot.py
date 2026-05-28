@@ -24,6 +24,8 @@ def load_data():
             dados = json.load(f)
             if "produtos" not in dados:
                 dados["produtos"] = {}
+            if "canal_loja" not in dados:
+                dados["canal_loja"] = None
             return dados
     except:
         return {"produtos": {}, "canal_loja": None}
@@ -87,7 +89,8 @@ def criar_painel():
         description="Escolha:",
         color=discord.Color.from_rgb(255, 0, 0)
     )
-    view = ui.View()
+    # View com timeout None = infinite uses
+    view = ui.View(timeout=None)
     produtos = data.get("produtos", {})
     
     for pid, d in produtos.items():
@@ -96,6 +99,7 @@ def criar_painel():
         desc = d.get("desc", "")[:60]
         embed.add_field(name=nome, value=f"{preco} - {desc}")
         view.add_item(BotaoComprar(pid, nome, preco))
+    
     return embed, view
 
 @bot.tree.command(name="ping")
@@ -150,9 +154,38 @@ async def cmd_enviar_loja(interaction):
         await interaction.response.send_message("Canal invalido", ephemeral=True)
         return
     
+    # Creates new painel each time
+    embed, view = criar_painel()
+    msg = await canal.send(embed=embed, view=view)
+    
+    # Saves message ID for future reference
+    data["last_message"] = str(msg.id)
+    save_data(data)
+    
+    await interaction.response.send_message("Loja env ada!", ephemeral=True)
+
+@bot.tree.command(name="atualizar-loja")
+async def cmd_atualizar_loja(interaction):
+    """Atualiza o painel da loja no canal"""
+    if not is_admin(interaction.user):
+        await interaction.response.send_message("Sem permissao", ephemeral=True)
+        return
+    
+    data = load_data()
+    canal_id = data.get("canal_loja")
+    if not canal_id:
+        await interaction.response.send_message("Use /loja-canal primeiro", ephemeral=True)
+        return
+    
+    canal = bot.get_channel(int(canal_id))
+    if not canal:
+        await interaction.response.send_message("Canal invalido", ephemeral=True)
+        return
+    
     embed, view = criar_painel()
     await canal.send(embed=embed, view=view)
-    await interaction.response.send_message("Enviado!", ephemeral=True)
+    
+    await interaction.response.send_message("Loja atualizada!", ephemeral=True)
 
 @bot.tree.command(name="lista-produtos")
 async def cmd_lista_produtos(interaction):
