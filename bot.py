@@ -52,6 +52,48 @@ def save_data(data):
 def is_admin(member):
     return any(r.name == "Admin" for r in member.roles)
 
+class AvaliarModal(ui.Modal):
+    def __init__(self, produto):
+        super().__init__(title=f"Avaliar {produto}")
+        self.produto = produto
+        
+        self.nota = ui.TextInput(
+            label="Nota (1-5 estrelas)",
+            placeholder="⭐⭐⭐⭐⭐",
+            max_length=5,
+            required=True
+        )
+        self.comentario = ui.TextInput(
+            label="Comentario",
+            placeholder="O que achou do produto?",
+            style=discord.TextStyle.paragraph,
+            required=False
+        )
+        
+        self.add_item(self.nota)
+        self.add_item(self.comentario)
+
+    async def callback(self, interaction):
+        nota = self.nota.value
+        comentario = self.comentario.value or "Sem comentario"
+        
+        feedbacks = load_feedback()
+        feedbacks.append({
+            "produto": self.produto,
+            "user": str(interaction.user),
+            "nota": nota,
+            "comentario": comentario,
+            "data": str(datetime.now())
+        })
+        save_feedback(feedbacks)
+        
+        embed = discord.Embed(
+            title="⭐ Obrigado!",
+            description="Sua avaliacao foi registrada!",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 class BotaoComprar(ui.Button):
     def __init__(self, pid, nome, preco):
         super().__init__(
@@ -86,22 +128,21 @@ class BotaoComprar(ui.Button):
             embed.add_field(name="Produto", value=prod["nome"], inline=True)
             embed.add_field(name="Preco", value=prod["preco"], inline=True)
             embed.add_field(name="Descricao", value=prod["desc"], inline=False)
-            embed.set_footer(text="Aguardando pagamento...")
             
             await canal.send(content=f"{user.mention}", embed=embed)
             await canal.send("Pix: adrianalmarques80@gmail.com")
             
-            # Add feedback button in channel
-            view_feedback = ui.View(timeout=None)
+            # Botao de avaliar abre modal
+            view_btn = ui.View(timeout=None)
             btn = ui.Button(
                 label="⭐ AVALIAR COMPRA",
-                custom_id=f"avaliar_{prod['nome']}",
+                custom_id=f"btn_avaliar_{prod['nome']}",
                 style=discord.ButtonStyle.secondary,
                 emoji="⭐"
             )
-            view_feedback.add_item(btn)
+            view_btn.add_item(btn)
             
-            await canal.send("Apos receber seu produto, clique abaixo para avaliar:", view=view_feedback)
+            await canal.send("Apos receber seu produto, clique abaixo para avaliar:", view=view_btn)
             
             await interaction.followup.send(f"Carrinho criado em {canal.mention}!", ephemeral=True)
         except Exception as e:
@@ -110,21 +151,10 @@ class BotaoComprar(ui.Button):
             except:
                 pass
 
-class BotaoAvaliar(ui.Button):
-    def __init__(self, produto):
-        super().__init__(
-            label="⭐ AVALIAR",
-            custom_id=f"avaliar_{produto}",
-            style=discord.ButtonStyle.secondary,
-            emoji="⭐"
-        )
-        self.produto = produto
-
-    async def callback(self, interaction):
-        await interaction.response.send_message(
-            "Digite sua avaliacao:\nUse /feedback [estrelas] [comentario]\n\nExemplo: /feedback 5 Muito bom!",
-            ephemeral=True
-        )
+@bot.tree.command(name="avaliar")
+async def cmd_avaliar(interaction, produto: str):
+    """Abre modal de avaliacao"""
+    await interaction.response.send_modal(AvaliarModal(produto))
 
 def criar_painel():
     data = load_data()
@@ -148,20 +178,6 @@ def criar_painel():
 @bot.tree.command(name="ping")
 async def ping(interaction):
     await interaction.response.send_message(f"Online! {round(bot.latency*1000)}ms")
-
-@bot.tree.command(name="feedback")
-async def cmd_feedback(interaction, nota: str, *, comentario: str = "Sem comentario"):
-    """Deixe um feedback"""
-    feedbacks = load_feedback()
-    feedbacks.append({
-        "produto": "Geral",
-        "user": str(interaction.user),
-        "nota": nota,
-        "comentario": comentario,
-        "data": str(datetime.now())
-    })
-    save_feedback(feedbacks)
-    await interaction.response.send_message("Obrigado pelo feedback! 🙏", ephemeral=True)
 
 @bot.tree.command(name="loja")
 async def cmd_loja(interaction):
@@ -291,6 +307,15 @@ async def cmd_sync(interaction):
         return
     await bot.tree.sync()
     await interaction.response.send_message("Sincronizado!", ephemeral=True)
+
+@bot.event
+async def on_interaction(interaction):
+    if interaction.type == discord.InteractionType.component:
+        custom_id = interaction.data.get("custom_id", "")
+        
+        if custom_id.startswith("btn_avaliar_"):
+            produto = custom_id.replace("btn_avaliar_", "")
+            await interaction.response.send_modal(AvaliarModal(produto))
 
 @bot.event
 async def on_ready():
