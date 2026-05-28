@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import ui
 import json
 import os
+from datetime import datetime
 
 TOKEN = os.environ.get("TOKEN")
 if not TOKEN:
@@ -10,6 +11,7 @@ if not TOKEN:
     exit()
 
 DATA_FILE = "data.json"
+FEEDBACK_FILE = "feedback.json"
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -29,6 +31,19 @@ def load_data():
             return dados
     except:
         return {"produtos": {}, "canal_loja": None}
+
+def load_feedback():
+    try:
+        if not os.path.exists(FEEDBACK_FILE):
+            return []
+        with open(FEEDBACK_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_feedback(data):
+    with open(FEEDBACK_FILE, "w") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 def save_data(data):
     with open(DATA_FILE, "w") as f:
@@ -89,7 +104,6 @@ def criar_painel():
         description="Escolha:",
         color=discord.Color.from_rgb(255, 0, 0)
     )
-    # View com timeout None = infinite uses
     view = ui.View(timeout=None)
     produtos = data.get("produtos", {})
     
@@ -101,6 +115,47 @@ def criar_painel():
         view.add_item(BotaoComprar(pid, nome, preco))
     
     return embed, view
+
+class FeedbackModal(ui.Modal):
+    def __init__(self, produto):
+        super().__init__(title=f"Avaliar {produto}")
+        self.produto = produto
+        
+        self.nota = ui.TextInput(label="Nota (1-5 estrelas)", placeholder="⭐⭐⭐⭐⭐")
+        self.comentario = ui.TextInput(label="Comentario", placeholder="O que achou do produto?", style=discord.TextStyle.paragraph, required=False)
+        
+        self.add_item(self.nota)
+        self.add_item(self.comentario)
+
+    async def callback(self, interaction):
+        nota = self.nota.value
+        comentario = self.comentario.value or "Sem comentario"
+        
+        # Save feedback
+        feedbacks = load_feedback()
+        feedbacks.append({
+            "produto": self.produto,
+            "user": str(interaction.user),
+            "nota": nota,
+            "comentario": comentario,
+            "data": str(datetime.now())
+        })
+        save_feedback(feedbacks)
+        
+        await interaction.response.send_message("Obrigado pelo feedback! 🙏", ephemeral=True)
+
+class BotaoFeedback(ui.Button):
+    def __init__(self, produto):
+        super().__init__(
+            label=f"Avaliar {produto}",
+            custom_id=f"feedback_{produto}",
+            style=discord.ButtonStyle.secondary,
+            emoji="⭐"
+        )
+        self.produto = produto
+
+    async def callback(self, interaction):
+        await interaction.response.send_modal(FeedbackModal(self.produto))
 
 @bot.tree.command(name="ping")
 async def ping(interaction):
@@ -154,19 +209,35 @@ async def cmd_enviar_loja(interaction):
         await interaction.response.send_message("Canal invalido", ephemeral=True)
         return
     
-    # Creates new painel each time
     embed, view = criar_painel()
-    msg = await canal.send(embed=embed, view=view)
+    await canal.send(embed=embed, view=view)
+    await interaction.response.send_message("Loja enviada!", ephemeral=True)
+
+@bot.tree.command(name="ver-feedback")
+async def cmd_ver_feedback(interaction):
+    """Ver feedbacks dos produtos"""
+    if not is_admin(interaction.user):
+        await interaction.response.send_message("Sem permissao", ephemeral=True)
+        return
     
-    # Saves message ID for future reference
-    data["last_message"] = str(msg.id)
-    save_data(data)
+    feedbacks = load_feedback()
+    if not feedbacks:
+        await interaction.response.send_message("Nenhum feedback ainda.", ephemeral=True)
+        return
     
-    await interaction.response.send_message("Loja env ada!", ephemeral=True)
+    embed = discord.Embed(title="📝 Feedbacks", color=discord.Color.blue())
+    
+    for f in feedbacks[-10:]:  # Last 10
+        embed.add_field(
+            name=f["produto"],
+            value=f"⭐ {f['nota']}\n{f['comentario']}\n*Por: {f['user']}*",
+            inline=False
+        )
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="atualizar-loja")
 async def cmd_atualizar_loja(interaction):
-    """Atualiza o painel da loja no canal"""
     if not is_admin(interaction.user):
         await interaction.response.send_message("Sem permissao", ephemeral=True)
         return
@@ -184,7 +255,6 @@ async def cmd_atualizar_loja(interaction):
     
     embed, view = criar_painel()
     await canal.send(embed=embed, view=view)
-    
     await interaction.response.send_message("Loja atualizada!", ephemeral=True)
 
 @bot.tree.command(name="lista-produtos")
@@ -211,6 +281,7 @@ async def cmd_reset_loja(interaction):
         return
     data = {"produtos": {}, "canal_loja": None}
     save_data(data)
+    save_feedback([])
     await interaction.response.send_message("Loja resetada!", ephemeral=True)
 
 @bot.tree.command(name="sync")
