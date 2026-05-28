@@ -149,8 +149,6 @@ class BotaoComprar(ui.Button):
             await canal.send(content=f"{user.mention}", embed=embed)
             await canal.send("Pix: adrianalmarques80@gmail.com")
             
-            await canal.send("====================================================================================", view=view_btn)
-            
             view_btn = ui.View(timeout=None)
             btn = ui.Button(
                 label="⭐ AVALIAR",
