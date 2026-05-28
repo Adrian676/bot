@@ -16,23 +16,22 @@ FEEDBACK_FILE = "feedback.json"
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
+intents.members = True  # Necessario para detectar entrad@s
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 def load_data():
     try:
         if not os.path.exists(DATA_FILE):
-            return {"produtos": {}, "canal_loja": None, "canal_feedback": None}
+            return {"produtos": {}, "canal_loja": None, "canal_feedback": None, "canal_boasvindas": None}
         with open(DATA_FILE, "r") as f:
             dados = json.load(f)
             if "produtos" not in dados:
                 dados["produtos"] = {}
-            if "canal_loja" not in dados:
-                dados["canal_loja"] = None
-            if "canal_feedback" not in dados:
-                dados["canal_feedback"] = None
+            if "canal_boasvindas" not in dados:
+                dados["canal_boasvindas"] = None
             return dados
     except:
-        return {"produtos": {}, "canal_loja": None, "canal_feedback": None}
+        return {"produtos": {}, "canal_loja": None, "canal_feedback": None, "canal_boasvindas": None}
 
 def load_feedback():
     try:
@@ -93,22 +92,15 @@ class FeedbackModal(ui.Modal, title="Avaliar Produto"):
             canal = bot.get_channel(int(canal_id))
             if canal:
                 embed = discord.Embed(
-                    title="╔═════════════════════════════════════════╗",
-                    description="║     ⭐ NOVO FEEDBACK RECEBIDO     ⭐     ║",
+                    title="⭐ NOVO FEEDBACK RECEBIDO",
                     color=discord.Color.purple()
                 )
-                embed.set_author(name="Loja Virtual")
-                
-                embed.add_field(name="📦 PRODUTO", value=f"**{self.produto}**", inline=True)
-                embed.add_field(name="⭐ NOTA", value=nota, inline=True)
-                embed.add_field(name="👤 USUÁRIO", value=str(interaction.user), inline=False)
-                embed.add_field(name="💬 COMENTÁRIO", value=f"_{comentario}_", inline=False)
-                embed.add_field(name="📅 DATA", value=datetime.now().strftime("%d/%m/%Y às %H:%M"), inline=True)
-                
-                embed.set_footer(text="Loja Virtual - Feedbacks")
+                embed.add_field(name="PRODUTO", value=self.produto, inline=True)
+                embed.add_field(name="NOTA", value=nota, inline=True)
+                embed.add_field(name="USUARIO", value=str(interaction.user), inline=False)
+                embed.add_field(name="COMENTARIO", value=comentario, inline=False)
                 
                 await canal.send(embed=embed)
-                await canal.send("🆕 **NOVO FEEDBACK!** Ver acima ⬆️")
         
         await interaction.response.send_message("⭐ Obrigado pelo feedback!", ephemeral=True)
 
@@ -156,12 +148,36 @@ class BotaoComprar(ui.Button):
                 style=discord.ButtonStyle.secondary
             )
             view_btn.add_item(btn)
-
+            
             await canal.send("Apos receber o produto, clique para avaliar:", view=view_btn)
             
             await interaction.followup.send(f"Carrinho criado em {canal.mention}!", ephemeral=True)
         except:
             await interaction.followup.send("Erro ao criar canal!", ephemeral=True)
+
+# Sistema de BOAS-VINDAS
+@bot.event
+async def on_member_join(member):
+    data = load_data()
+    canal_id = data.get("canal_boasvindas")
+    
+    if canal_id:
+        canal = bot.get_channel(int(canal_id))
+        if canal:
+            embed = discord.Embed(
+                title="🎉 BEM-VINDO! 🎉",
+                description=f"Ola {member.mention}! Seja bem-vindo ao servidor!",
+                color=discord.Color.green()
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+            embed.add_field(name="Nome", value=member.name, inline=True)
+            embed.add_field(name="Entrou", value=datetime.now().strftime("%d/%m/%Y as %H:%M"), inline=True)
+            embed.set_footer(text="Loja Virtual")
+            
+            await canal.send(embed=embed)
+            
+            # Mensagem de boas-vindas direta
+            await member.send(f"Ola! Bem-vindo ao servidor! Divirta-se! 🎮")
 
 def criar_painel():
     data = load_data()
@@ -228,6 +244,18 @@ async def cmd_feedback_canal(interaction, canal: discord.TextChannel):
     save_data(data)
     await interaction.response.send_message(f"Canal de feedback: {canal.mention}", ephemeral=True)
 
+@bot.tree.command(name="boasvindas-canal")
+async def cmd_boasvindas_canal(interaction, canal: discord.TextChannel):
+    """Define o canal de boas-vindas"""
+    if not is_admin(interaction.user):
+        await interaction.response.send_message("Sem permissao", ephemeral=True)
+        return
+    
+    data = load_data()
+    data["canal_boasvindas"] = str(canal.id)
+    save_data(data)
+    await interaction.response.send_message(f"Canal de boas-vindas: {canal.mention}", ephemeral=True)
+
 @bot.tree.command(name="painel-admin")
 async def cmd_painel_admin(interaction):
     if not is_admin(interaction.user):
@@ -244,17 +272,17 @@ async def cmd_painel_admin(interaction):
     
     loja_canal = bot.get_channel(int(data.get("canal_loja", 0))) if data.get("canal_loja") else "Nao configurado"
     feedback_canal = bot.get_channel(int(data.get("canal_feedback", 0))) if data.get("canal_feedback") else "Nao configurado"
+    bv_canal = bot.get_channel(int(data.get("canal_boasvindas", 0))) if data.get("canal_boasvindas") else "Nao configurado"
     
     embed.add_field(name="🛒 Canal da Loja", value=str(loja_canal), inline=False)
     embed.add_field(name="📝 Canal de Feedback", value=str(feedback_canal), inline=False)
+    embed.add_field(name="🎉 Canal de Boas-Vindas", value=str(bv_canal), inline=False)
     
     produtos_count = len(data.get("produtos", {}))
     feedbacks_count = len(load_feedback())
     
     embed.add_field(name="📦 Produtos", value=str(produtos_count), inline=True)
     embed.add_field(name="💬 Total Feedbacks", value=str(feedbacks_count), inline=True)
-    
-    embed.set_footer(text="Loja Virtual - Painel Admin")
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -293,7 +321,7 @@ async def cmd_ver_feedback(interaction):
     for f in feedbacks[-10:]:
         embed.add_field(
             name=f"📦 {f['produto']}",
-            value=f"⭐ {f['nota']}\n💬 {f['comentario']}\n👤 {f['user']}\n📅 {f['data']}",
+            value=f"⭐ {f['nota']}\n💬 {f['comentario']}\n👤 {f['user']}",
             inline=False
         )
     
@@ -337,7 +365,7 @@ async def cmd_remove_produto(interaction, pid: str):
 async def cmd_reset_loja(interaction):
     if not is_admin(interaction.user):
         return
-    save_data({"produtos": {}, "canal_loja": None, "canal_feedback": None})
+    save_data({"produtos": {}, "canal_loja": None, "canal_feedback": None, "canal_boasvindas": None})
     save_feedback([])
     await interaction.response.send_message("Loja resetada!", ephemeral=True)
 
