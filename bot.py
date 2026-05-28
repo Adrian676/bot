@@ -43,31 +43,32 @@ class BotaoComprar(ui.Button):
             style=discord.ButtonStyle.success
         )
 
-    async def callback(self, interaction):
-        pid = self.custom_id.replace("comprar_", "")
-        data = load_data()
-        prod = data["produtos"].get(pid)
+async def callback(self, interaction):
+    pid = self.custom_id.replace("comprar_", "")
+    data = load_data()
+    prod = data["produtos"].get(pid)
+    
+    if prod:
+        user = interaction.user
+        guild = interaction.guild
         
-        if prod:
-            user = interaction.user
-            guild = interaction.guild
+        try:
+            await interaction.response.defer()
+            canal = await guild.create_text_channel(f"compra-{user.name}")
+            await canal.set_permissions(user, view_channel=True, send_messages=True)
+            await canal.set_permissions(guild.default_role, view_channel=False)
             
-            try:
-                await interaction.response.defer()
-                canal = await guild.create_text_channel(f"compra-{user.name}")
-                await canal.set_permissions(user, view_channel=True, send_messages=True)
-                await canal.set_permissions(guild.default_role, view_channel=False)
-                
-                embed = discord.Embed(title="Confirmacao", color=discord.Color.green())
-                embed.add_field(name="Produto", value=prod["nome"])
-                embed.add_field(name="Preco", value=prod["preco"])
-                embed.add_field(name="Descricao", value=prod["desc"])
-                
-                await canal.send(content=f"{user.mention}", embed=embed)
-                await canal.send("# Realize seu pagamento para o seguinte pix: adrianalmarques80@gmail.com")
-                await interaction.response.send_message(f"Carrinho aberto em: {canal.mention}!", ephemeral=True)
-            except:
-                await interaction.followup.send("Erro!", ephemeral=True)
+            embed = discord.Embed(title="Confirmação", color=discord.Color.from_rgb(255,0,0))
+            embed.add_field(name="Produto", value=prod["nome"])
+            embed.add_field(name="Preco", value=prod["preco"])
+            embed.add_field(name="Descricao", value=prod["desc"])
+            
+            await canal.send(content=f"{user.mention}", embed=embed)
+            await canal.send("Realize seu pagamento para o seguinte pix:")
+            await canal.send("# adrianalmarques80@gmail.com")
+            await interaction.followup.send("Carrinho Criado!", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Erro ao criar canal. O bot tem permissao para criar canais?", ephemeral=True)
 
 def criar_painel():
     data = load_data()
