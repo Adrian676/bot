@@ -65,7 +65,7 @@ class BotaoComprar(ui.Button):
                 
                 await canal.send(content=f"{user.mention}", embed=embed)
                 await canal.send("# Realize seu pagamento para o seguinte pix: adrianalmarques80@gmail.com")
-                await interaction.response.send_message(f"Carrinhho aberto em: {canal.mention}!", ephemeral=True))
+                await interaction.response.send_message(f"Carrinho aberto em: {canal.mention}!", ephemeral=True)
             except:
                 await interaction.followup.send("Erro!", ephemeral=True)
 
