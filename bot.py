@@ -149,6 +149,8 @@ class BotaoComprar(ui.Button):
             await canal.send(content=f"{user.mention}", embed=embed)
             await canal.send("Pix: adrianalmarques80@gmail.com")
             
+            await canal.send("====================================================================================", view=view_btn)
+            
             view_btn = ui.View(timeout=None)
             btn = ui.Button(
                 label="⭐ AVALIAR",
@@ -156,8 +158,6 @@ class BotaoComprar(ui.Button):
                 style=discord.ButtonStyle.secondary
             )
             view_btn.add_item(btn)
-            
-            await canal.send("====================================================================================", view=view_btn)
 
             await canal.send("Apos receber o produto, clique para avaliar:", view=view_btn)
             
