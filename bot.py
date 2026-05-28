@@ -64,7 +64,7 @@ class BotaoComprar(ui.Button):
                 embed.add_field(name="Descricao", value=prod["desc"])
                 
                 await canal.send(content=f"{user.mention}", embed=embed)
-                await canal.send("ENVIE O PIX!")
+                await canal.send("Realize seu pagamento para o seguinte pix: adrianalmarques80@gmail.com")
                 await interaction.followup.send("Canal Criado!", ephemeral=True)
             except:
                 await interaction.followup.send("Erro!", ephemeral=True)
@@ -77,7 +77,7 @@ def criar_painel():
     color=discord.Color.from_rgb(255,0,0)
 )
     view = ui.View()
-    for pid, d in data["### produtos"].items():
+    for pid, d in data["produtos"].items():
         embed.add_field(name=d["nome"], value=f"{d['preco']} - {d['desc'][:60]}")
         view.add_item(BotaoComprar(pid, d["nome"], d["preco"]))
     return embed, view
