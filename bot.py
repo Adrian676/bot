@@ -93,7 +93,7 @@ class FeedbackModal(ui.Modal, title="Avaliar Produto"):
             canal = bot.get_channel(int(canal_id))
             if canal:
                 embed = discord.Embed(
-                    title="╔════════════════════════════════════════════╗",
+                    title="╔═════════════════════════════════════════╗",
                     description="║     ⭐ NOVO FEEDBACK RECEBIDO     ⭐     ║",
                     color=discord.Color.purple()
                 )
@@ -157,6 +157,8 @@ class BotaoComprar(ui.Button):
             )
             view_btn.add_item(btn)
             
+            await canal.send("====================================================================================", view=view_btn)
+
             await canal.send("Apos receber o produto, clique para avaliar:", view=view_btn)
             
             await interaction.followup.send(f"Carrinho criado em {canal.mention}!", ephemeral=True)
