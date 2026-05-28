@@ -64,7 +64,7 @@ class BotaoComprar(ui.Button):
                 embed.add_field(name="Descricao", value=prod["desc"])
                 
                 await canal.send(content=f"{user.mention}", embed=embed)
-                await canal.send("Realize seu pagamento para o seguinte pix: adrianalmarques80@gmail.com")
+                await canal.send("Realize seu pagamento para o seguinte pix: # adrianalmarques80@gmail.com")
                 await interaction.followup.send("Canal Criado!", ephemeral=True)
             except:
                 await interaction.followup.send("Erro!", ephemeral=True)
