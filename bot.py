@@ -52,30 +52,29 @@ def save_data(data):
 def is_admin(member):
     return any(r.name == "Admin" for r in member.roles)
 
-class AvaliarModal(ui.Modal):
+# Modal de feedback
+class FeedbackModal(ui.Modal, title="Avaliar Produto"):
     def __init__(self, produto):
-        super().__init__(title=f"Avaliar {produto}")
+        super().__init__()
         self.produto = produto
-        
         self.nota = ui.TextInput(
-            label="Nota (1-5 estrelas)",
+            label="Nota (1-5)",
             placeholder="⭐⭐⭐⭐⭐",
             max_length=5,
             required=True
         )
         self.comentario = ui.TextInput(
             label="Comentario",
-            placeholder="O que achou do produto?",
+            placeholder="Escreva seu comentario...",
             style=discord.TextStyle.paragraph,
             required=False
         )
-        
         self.add_item(self.nota)
         self.add_item(self.comentario)
 
-    async def callback(self, interaction):
+    async def on_submit(self, interaction: discord.Interaction):
         nota = self.nota.value
-        comentario = self.comentario.value or "Sem comentario"
+        comentario = self.comentario.value if self.comentario.value else "Sem comentario"
         
         feedbacks = load_feedback()
         feedbacks.append({
@@ -87,12 +86,7 @@ class AvaliarModal(ui.Modal):
         })
         save_feedback(feedbacks)
         
-        embed = discord.Embed(
-            title="⭐ Obrigado!",
-            description="Sua avaliacao foi registrada!",
-            color=discord.Color.green()
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message("⭐ Obrigado pelo feedback!", ephemeral=True)
 
 class BotaoComprar(ui.Button):
     def __init__(self, pid, nome, preco):
@@ -103,7 +97,6 @@ class BotaoComprar(ui.Button):
         )
         self.pid = pid
         self.nome = nome
-        self.preco = preco
 
     async def callback(self, interaction):
         try:
@@ -132,29 +125,20 @@ class BotaoComprar(ui.Button):
             await canal.send(content=f"{user.mention}", embed=embed)
             await canal.send("Pix: adrianalmarques80@gmail.com")
             
-            # Botao de avaliar abre modal
+            # Botao para avaliar
             view_btn = ui.View(timeout=None)
             btn = ui.Button(
-                label="⭐ AVALIAR COMPRA",
-                custom_id=f"btn_avaliar_{prod['nome']}",
-                style=discord.ButtonStyle.secondary,
-                emoji="⭐"
+                label="⭐ AVALIAR",
+                custom_id=f"avaliar_{prod['nome']}",
+                style=discord.ButtonStyle.secondary
             )
             view_btn.add_item(btn)
             
-            await canal.send("Apos receber seu produto, clique abaixo para avaliar:", view=view_btn)
+            await canal.send("Apos receber o produto, clique para avaliar:", view=view_btn)
             
             await interaction.followup.send(f"Carrinho criado em {canal.mention}!", ephemeral=True)
-        except Exception as e:
-            try:
-                await interaction.followup.send(f"Erro: O bot tem permissao para criar canais?", ephemeral=True)
-            except:
-                pass
-
-@bot.tree.command(name="avaliar")
-async def cmd_avaliar(interaction, produto: str):
-    """Abre modal de avaliacao"""
-    await interaction.response.send_modal(AvaliarModal(produto))
+        except:
+            await interaction.followup.send("Erro ao criar canal!", ephemeral=True)
 
 def criar_painel():
     data = load_data()
@@ -198,8 +182,7 @@ async def cmd_add_produto(interaction, nome: str, preco: str, canal: discord.Tex
     
     embed, view = criar_painel()
     await canal.send(embed=embed, view=view)
-    
-    await interaction.response.send_message(f"Produto adicionado!", ephemeral=True)
+    await interaction.response.send_message("Produto adicionado!", ephemeral=True)
 
 @bot.tree.command(name="loja-canal")
 async def cmd_loja_canal(interaction, canal: discord.TextChannel):
@@ -239,17 +222,12 @@ async def cmd_ver_feedback(interaction):
     
     feedbacks = load_feedback()
     if not feedbacks:
-        await interaction.response.send_message("Nenhum feedback ainda.", ephemeral=True)
+        await interaction.response.send_message("Nenhum feedback.", ephemeral=True)
         return
     
     embed = discord.Embed(title="📝 Feedbacks", color=discord.Color.blue())
-    
     for f in feedbacks[-10:]:
-        embed.add_field(
-            name=f["produto"],
-            value=f"⭐ {f['nota']}\n{f['comentario']}\n*Por: {f['user']}*",
-            inline=False
-        )
+        embed.add_field(name=f["produto"], value=f"⭐ {f['nota']}\n{f['comentario']}\n*Por: {f['user']}*", inline=False)
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -260,12 +238,7 @@ async def cmd_atualizar_loja(interaction):
         return
     
     data = load_data()
-    canal_id = data.get("canal_loja")
-    if not canal_id:
-        await interaction.response.send_message("Use /loja-canal primeiro", ephemeral=True)
-        return
-    
-    canal = bot.get_channel(int(canal_id))
+    canal = bot.get_channel(int(data.get("canal_loja", 0)))
     if not canal:
         await interaction.response.send_message("Canal invalido", ephemeral=True)
         return
@@ -296,8 +269,7 @@ async def cmd_remove_produto(interaction, pid: str):
 async def cmd_reset_loja(interaction):
     if not is_admin(interaction.user):
         return
-    data = {"produtos": {}, "canal_loja": None}
-    save_data(data)
+    save_data({"produtos": {}, "canal_loja": None})
     save_feedback([])
     await interaction.response.send_message("Loja resetada!", ephemeral=True)
 
@@ -308,14 +280,15 @@ async def cmd_sync(interaction):
     await bot.tree.sync()
     await interaction.response.send_message("Sincronizado!", ephemeral=True)
 
+# Handler para botoes
 @bot.event
 async def on_interaction(interaction):
     if interaction.type == discord.InteractionType.component:
         custom_id = interaction.data.get("custom_id", "")
         
-        if custom_id.startswith("btn_avaliar_"):
-            produto = custom_id.replace("btn_avaliar_", "")
-            await interaction.response.send_modal(AvaliarModal(produto))
+        if custom_id.startswith("avaliar_"):
+            produto = custom_id.replace("avaliar_", "")
+            await interaction.response.send_modal(FeedbackModal(produto))
 
 @bot.event
 async def on_ready():
