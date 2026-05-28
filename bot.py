@@ -54,7 +54,6 @@ def save_data(data):
 def is_admin(member):
     return any(r.name == "Admin" for r in member.roles)
 
-# Modal de feedback
 class FeedbackModal(ui.Modal, title="Avaliar Produto"):
     def __init__(self, produto):
         super().__init__()
@@ -88,35 +87,27 @@ class FeedbackModal(ui.Modal, title="Avaliar Produto"):
         })
         save_feedback(feedbacks)
         
-        # Envia painel BONITO para o canal de feedback
         data = load_data()
         canal_id = data.get("canal_feedback")
         if canal_id:
             canal = bot.get_channel(int(canal_id))
             if canal:
-                # Embed grande e bonito
                 embed = discord.Embed(
                     title="╔════════════════════════════════════════════╗",
                     description="║     ⭐ NOVO FEEDBACK RECEBIDO     ⭐     ║",
                     color=discord.Color.purple()
                 )
-                embed.set_author(name="Loja Virtual", icon_url="https://i.imgur.com/seu-icon.png")
-                
-                # Nota com estrelas
-                estrelas = nota.replace("⭐", "★").replace(" ", "☆") if "⭐" in nota else nota + "⭐"
+                embed.set_author(name="Loja Virtual")
                 
                 embed.add_field(name="📦 PRODUTO", value=f"**{self.produto}**", inline=True)
-                embed.add_field(name="⭐ NOTA", value=estrelas, inline=True)
+                embed.add_field(name="⭐ NOTA", value=nota, inline=True)
                 embed.add_field(name="👤 USUÁRIO", value=str(interaction.user), inline=False)
                 embed.add_field(name="💬 COMENTÁRIO", value=f"_{comentario}_", inline=False)
                 embed.add_field(name="📅 DATA", value=datetime.now().strftime("%d/%m/%Y às %H:%M"), inline=True)
                 
-                embed.set_thumbnail(url="https://i.imgur.com/seu-icon.png")
-                embed.set_footer(text="Loja Virtual - Feedbacks", icon_url="https://i.imgur.com/seu-icon.png")
+                embed.set_footer(text="Loja Virtual - Feedbacks")
                 
                 await canal.send(embed=embed)
-                
-                # Mensagem extra de alerta
                 await canal.send("🆕 **NOVO FEEDBACK!** Ver acima ⬆️")
         
         await interaction.response.send_message("⭐ Obrigado pelo feedback!", ephemeral=True)
@@ -158,7 +149,6 @@ class BotaoComprar(ui.Button):
             await canal.send(content=f"{user.mention}", embed=embed)
             await canal.send("Pix: adrianalmarques80@gmail.com")
             
-            # Botao avaliar
             view_btn = ui.View(timeout=None)
             btn = ui.Button(
                 label="⭐ AVALIAR",
@@ -252,13 +242,17 @@ async def cmd_painel_admin(interaction):
         color=discord.Color.blue()
     )
     
-    loja_canal = bot.get_channel(int(data.get("canal_loja", 0))) if data.get("canal_loja") else "Não configurado"
-    feedback_canal = bot.get_channel(int(data.get("canal_feedback", 0))) if data.get("canal_feedback") else "Não configurado"
+    loja_canal = bot.get_channel(int(data.get("canal_loja", 0))) if data.get("canal_loja") else "Nao configurado"
+    feedback_canal = bot.get_channel(int(data.get("canal_feedback", 0))) if data.get("canal_feedback") else "Nao configurado"
     
     embed.add_field(name="🛒 Canal da Loja", value=str(loja_canal), inline=False)
     embed.add_field(name="📝 Canal de Feedback", value=str(feedback_canal), inline=False)
-    embed.add_field(name="📦 Produtos", value=str(len(data.get("produtos", {})))), inline=True)
-    embed.add_field(name="💬 Total Feedbacks", value=str(len(load_feedback()))), inline=True)
+    
+    produtos_count = len(data.get("produtos", {}))
+    feedbacks_count = len(load_feedback())
+    
+    embed.add_field(name="📦 Produtos", value=str(produtos_count), inline=True)
+    embed.add_field(name="💬 Total Feedbacks", value=str(feedbacks_count), inline=True)
     
     embed.set_footer(text="Loja Virtual - Painel Admin")
     
@@ -277,7 +271,7 @@ async def cmd_enviar_loja(interaction):
     
     canal = bot.get_channel(int(canal_id))
     if not canal:
-        await interaction.response.send_message("Canal inválido", ephemeral=True)
+        await interaction.response.send_message("Canal invalido", ephemeral=True)
         return
     
     embed, view = criar_painel()
@@ -314,7 +308,7 @@ async def cmd_atualizar_loja(interaction):
     data = load_data()
     canal = bot.get_channel(int(data.get("canal_loja", 0)))
     if not canal:
-        await interaction.response.send_message("Canal inválido", ephemeral=True)
+        await interaction.response.send_message("Canal invalido", ephemeral=True)
         return
     
     embed, view = criar_painel()
@@ -354,7 +348,6 @@ async def cmd_sync(interaction):
     await bot.tree.sync()
     await interaction.response.send_message("Sincronizado!", ephemeral=True)
 
-# Handler botoes
 @bot.event
 async def on_interaction(interaction):
     if interaction.type == discord.InteractionType.component:
