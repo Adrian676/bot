@@ -21,16 +21,18 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 def load_data():
     try:
         if not os.path.exists(DATA_FILE):
-            return {"produtos": {}, "canal_loja": None}
+            return {"produtos": {}, "canal_loja": None, "canal_feedback": None}
         with open(DATA_FILE, "r") as f:
             dados = json.load(f)
             if "produtos" not in dados:
                 dados["produtos"] = {}
             if "canal_loja" not in dados:
                 dados["canal_loja"] = None
+            if "canal_feedback" not in dados:
+                dados["canal_feedback"] = None
             return dados
     except:
-        return {"produtos": {}, "canal_loja": None}
+        return {"produtos": {}, "canal_loja": None, "canal_feedback": None}
 
 def load_feedback():
     try:
@@ -76,6 +78,7 @@ class FeedbackModal(ui.Modal, title="Avaliar Produto"):
         nota = self.nota.value
         comentario = self.comentario.value if self.comentario.value else "Sem comentario"
         
+        # Save feedback
         feedbacks = load_feedback()
         feedbacks.append({
             "produto": self.produto,
@@ -85,6 +88,23 @@ class FeedbackModal(ui.Modal, title="Avaliar Produto"):
             "data": str(datetime.now())
         })
         save_feedback(feedbacks)
+        
+        # Send to feedback channel
+        data = load_data()
+        canal_id = data.get("canal_feedback")
+        if canal_id:
+            canal = bot.get_channel(int(canal_id))
+            if canal:
+                embed = discord.Embed(
+                    title="📝 Novo Feedback",
+                    color=discord.Color.purple()
+                )
+                embed.add_field(name="Produto", value=self.produto, inline=True)
+                embed.add_field(name="Nota", value=nota, inline=True)
+                embed.add_field(name="Usuario", value=str(interaction.user), inline=False)
+                embed.add_field(name="Comentario", value=comentario, inline=False)
+                embed.set_footer(text=f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                await canal.send(embed=embed)
         
         await interaction.response.send_message("⭐ Obrigado pelo feedback!", ephemeral=True)
 
@@ -125,7 +145,7 @@ class BotaoComprar(ui.Button):
             await canal.send(content=f"{user.mention}", embed=embed)
             await canal.send("Pix: adrianalmarques80@gmail.com")
             
-            # Botao para avaliar
+            # Botao avaliar
             view_btn = ui.View(timeout=None)
             btn = ui.Button(
                 label="⭐ AVALIAR",
@@ -192,7 +212,51 @@ async def cmd_loja_canal(interaction, canal: discord.TextChannel):
     data = load_data()
     data["canal_loja"] = str(canal.id)
     save_data(data)
-    await interaction.response.send_message(f"Canal: {canal.mention}", ephemeral=True)
+    await interaction.response.send_message(f"Canal da loja: {canal.mention}", ephemeral=True)
+
+@bot.tree.command(name="feedback-canal")
+async def cmd_feedback_canal(interaction, canal: discord.TextChannel):
+    """Define o canal para receber feedbacks"""
+    if not is_admin(interaction.user):
+        await interaction.response.send_message("Sem permissao", ephemeral=True)
+        return
+    
+    data = load_data()
+    data["canal_feedback"] = str(canal.id)
+    save_data(data)
+    await interaction.response.send_message(f"Canal de feedback: {canal.mention}", ephemeral=True)
+
+@bot.tree.command(name="painel-admin")
+async def cmd_painel_admin(interaction):
+    """Painel de configuracoes admin"""
+    if not is_admin(interaction.user):
+        await interaction.response.send_message("Sem permissao", ephemeral=True)
+        return
+    
+    data = load_data()
+    
+    embed = discord.Embed(
+        title="⚙️ PAINEL ADMIN",
+        description="Configuracoes da loja:",
+        color=discord.Color.blue()
+    )
+    
+    # Canais
+    loja_canal = bot.get_channel(int(data.get("canal_loja", 0))) if data.get("canal_loja") else "Nao configurado"
+    feedback_canal = bot.get_channel(int(data.get("canal_feedback", 0))) if data.get("canal_feedback") else "Nao configurado"
+    
+    embed.add_field(name="Canal da Loja", value=str(loja_canal), inline=False)
+    embed.add_field(name="Canal de Feedback", value=str(feedback_canal), inline=False)
+    
+    # Produtos
+    produtos = len(data.get("produtos", {}))
+    embed.add_field(name="Produtos", value=str(produtos), inline=False)
+    
+    # Feedbacks
+    feedbacks = len(load_feedback())
+    embed.add_field(name="Total de Feedbacks", value=str(feedbacks), inline=False)
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="enviar-loja")
 async def cmd_enviar_loja(interaction):
@@ -269,7 +333,7 @@ async def cmd_remove_produto(interaction, pid: str):
 async def cmd_reset_loja(interaction):
     if not is_admin(interaction.user):
         return
-    save_data({"produtos": {}, "canal_loja": None})
+    save_data({"produtos": {}, "canal_loja": None, "canal_feedback": None})
     save_feedback([])
     await interaction.response.send_message("Loja resetada!", ephemeral=True)
 
@@ -280,7 +344,7 @@ async def cmd_sync(interaction):
     await bot.tree.sync()
     await interaction.response.send_message("Sincronizado!", ephemeral=True)
 
-# Handler para botoes
+# Handler botoes
 @bot.event
 async def on_interaction(interaction):
     if interaction.type == discord.InteractionType.component:
