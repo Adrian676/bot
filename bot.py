@@ -16,6 +16,7 @@ FEEDBACK_FILE = "feedback.json"
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
+intents.members = True  # Necessario - habilite no Developer Portal!
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 def load_data():
@@ -51,6 +52,45 @@ def save_data(data):
 
 def is_admin(member):
     return any(r.name == "Admin" for r in member.roles)
+
+# Imagem de boas-vindas
+IMAGEM_BV = "https://media.discordapp.net/attachments/1508908153830375544/1508917359384072272/69be3d7d-a0f5-443c-808f-3637646506aa.png"
+
+@bot.event
+async def on_member_join(member):
+    try:
+        data = load_data()
+        canal_id = data.get("canal_boasvindas")
+        
+        canal = bot.get_channel(int(canal_id)) if canal_id else None
+        
+        if canal:
+            # Embed bonito
+            embed = discord.Embed(
+                title="🏝️ BEM VINDO AO SERVIDOR! 🏝️",
+                description=f" seja bem-vindo, {member.mention}! 🎉",
+                color=discord.Color.green()
+            )
+            embed.set_image(url=IMAGEM_BV)
+            
+            embed.add_field(
+                name="📗 REGRAS", 
+                value="Confirme nossas regras para nao sofrer punicoes!", 
+                inline=False
+            )
+            embed.add_field(
+                name="💸 COMPRAS", 
+                value="Para adquirir produtos, va ate o canal #compre-aqui", 
+                inline=False
+            )
+            
+            embed.set_thumbnail(url=str(member.display_avatar.url))
+            embed.set_footer(text="Loja Virtual")
+            
+            await canal.send(embed=embed)
+            print(f"Boas-vindas enviado para {member.name}")
+    except Exception as e:
+        print(f"Erro nas boas-vindas: {e}")
 
 class FeedbackModal(ui.Modal, title="Avaliar Produto"):
     def __init__(self, produto):
@@ -98,7 +138,6 @@ class FeedbackModal(ui.Modal, title="Avaliar Produto"):
                 embed.add_field(name="NOTA", value=nota, inline=True)
                 embed.add_field(name="USUARIO", value=str(interaction.user), inline=False)
                 embed.add_field(name="COMENTARIO", value=comentario, inline=False)
-                
                 await canal.send(embed=embed)
         
         await interaction.response.send_message("⭐ Obrigado pelo feedback!", ephemeral=True)
@@ -141,45 +180,13 @@ class BotaoComprar(ui.Button):
             await canal.send("Pix: adrianalmarques80@gmail.com")
             
             view_btn = ui.View(timeout=None)
-            btn = ui.Button(
-                label="⭐ AVALIAR",
-                custom_id=f"avaliar_{prod['nome']}",
-                style=discord.ButtonStyle.secondary
-            )
+            btn = ui.Button(label="⭐ AVALIAR", custom_id=f"avaliar_{prod['nome']}", style=discord.ButtonStyle.secondary)
             view_btn.add_item(btn)
             
             await canal.send("Apos receber o produto, clique para avaliar:", view=view_btn)
-            
             await interaction.followup.send(f"Carrinho criado em {canal.mention}!", ephemeral=True)
         except:
             await interaction.followup.send("Erro ao criar canal!", ephemeral=True)
-
-# Sistema de BOAS-VINDAS PERSONALIZADO
-IMAGEM_BOASVINDAS = "https://media.discordapp.net/attachments/1508908153830375544/1508917359384072272/69be3d7d-a0f5-443c-808f-3637646506aa.png"
-
-@bot.event
-async def on_member_join(member):
-    data = load_data()
-    canal_id = data.get("canal_boasvindas")
-    
-    if canal_id:
-        canal = bot.get_channel(int(canal_id))
-        if canal:
-            # Embed grande e bonito
-            embed = discord.Embed(
-                title="🏝️ BEM VINDO AO SERVIDOR! 🏝️",
-                description=f" seja bem-vindo, {member.mention}! 🎉",
-                color=discord.Color.green()
-            )
-            embed.set_image(url=IMAGEM_BOASVINDAS)
-            
-            embed.add_field(name="📗 REGRAS", value="Confirme nossas regras para nao sofrer punicoes!", inline=False)
-            embed.add_field(name="💸 COMPRAS", value="Para adquirir produtos, va ate o canal #compre-aqui", inline=False)
-            
-            embed.set_thumbnail(url=member.display_avatar.url)
-            embed.set_footer(text="Loja Virtual")
-            
-            await canal.send(embed=embed)
 
 def criar_painel():
     data = load_data()
@@ -264,11 +271,7 @@ async def cmd_painel_admin(interaction):
         return
     
     data = load_data()
-    
-    embed = discord.Embed(
-        title="⚙️ PAINEL ADMIN",
-        color=discord.Color.blue()
-    )
+    embed = discord.Embed(title="⚙️ PAINEL ADMIN", color=discord.Color.blue())
     
     loja_canal = bot.get_channel(int(data.get("canal_loja", 0))) if data.get("canal_loja") else "Nao configurado"
     feedback_canal = bot.get_channel(int(data.get("canal_feedback", 0))) if data.get("canal_feedback") else "Nao configurado"
@@ -372,7 +375,6 @@ async def cmd_sync(interaction):
 async def on_interaction(interaction):
     if interaction.type == discord.InteractionType.component:
         custom_id = interaction.data.get("custom_id", "")
-        
         if custom_id.startswith("avaliar_"):
             produto = custom_id.replace("avaliar_", "")
             await interaction.response.send_modal(FeedbackModal(produto))
